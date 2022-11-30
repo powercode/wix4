@@ -10,7 +10,9 @@ namespace WixToolset.Netfx
     {
         NetFxNativeImage,
         NetFxNetCoreSearch,
-        NetFxDotNetCompatibilityCheck
+        NetFxNetCoreSdkSearch,
+        NetFxDotNetCompatibilityCheck,
+        NetFxDotNetSdkCompatibilityCheck
     }
 
     public static partial class NetfxSymbolDefinitions
@@ -36,9 +38,15 @@ namespace WixToolset.Netfx
 
                 case NetfxSymbolDefinitionType.NetFxNetCoreSearch:
                     return NetfxSymbolDefinitions.NetFxNetCoreSearch;
-                    
+
+                case NetfxSymbolDefinitionType.NetFxNetCoreSdkSearch:
+                    return NetfxSymbolDefinitions.NetFxNetCoreSdkSearch;
+
                 case NetfxSymbolDefinitionType.NetFxDotNetCompatibilityCheck:
                     return NetfxSymbolDefinitions.NetFxDotNetCompatibilityCheck;
+
+                case NetfxSymbolDefinitionType.NetFxDotNetSdkCompatibilityCheck:
+                    return NetfxSymbolDefinitions.NetFxDotNetSdkCompatibilityCheck;
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(type));

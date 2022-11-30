@@ -115,6 +115,9 @@ STDMETHODIMP NetfxSearchExecute(
     case NETFX_SEARCH_TYPE_NET_CORE_SEARCH:
         hr = NetfxPerformDetectNetCore(wzVariable, pSearch, pEngine, wzBaseDirectory);
         break;
+    case NETFX_SEARCH_TYPE_NET_CORE_SDK_SEARCH:
+        hr = NetfxPerformDetectNetCoreSdk(wzVariable, pSearch, pEngine, wzBaseDirectory);
+        break;
     default:
         hr = E_UNEXPECTED;
     }
