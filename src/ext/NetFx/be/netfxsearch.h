@@ -8,6 +8,7 @@ enum NETFX_SEARCH_TYPE
 {
     NETFX_SEARCH_TYPE_NONE,
     NETFX_SEARCH_TYPE_NET_CORE_SEARCH,
+    NETFX_SEARCH_TYPE_NET_CORE_SDK_SEARCH,
 };
 
 enum NETFX_NET_CORE_RUNTIME_TYPE
@@ -53,6 +54,18 @@ typedef struct _NETFX_SEARCHES
 // function declarations
 
 STDMETHODIMP NetfxSearchParseFromXml(
+    __in NETFX_SEARCHES* pSearches,
+    __in IXMLDOMNode* pixnBundleExtension,
+    __in bool isSdk
+    );
+
+STDMETHODIMP NetfxSearchRuntimeParseFromXml(
+    __in NETFX_SEARCHES* pSearches,
+    __in IXMLDOMNode* pixnBundleExtension
+    );
+
+
+STDMETHODIMP NetfxSearchSdkParseFromXml(
     __in NETFX_SEARCHES* pSearches,
     __in IXMLDOMNode* pixnBundleExtension
     );

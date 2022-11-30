@@ -5,7 +5,8 @@
 
 STDMETHODIMP NetfxSearchParseFromXml(
     __in NETFX_SEARCHES* pSearches,
-    __in IXMLDOMNode* pixnBundleExtension
+    __in IXMLDOMNode* pixnBundleExtension,
+    __in bool isSdk
     )
 {
     HRESULT hr = S_OK;
@@ -13,7 +14,8 @@ STDMETHODIMP NetfxSearchParseFromXml(
     IXMLDOMNode* pixnNode = NULL;
     DWORD cNodes = 0;
     BSTR bstrNodeName = NULL;
-
+    const LPCWSTR nodeName = isSdk ? L"NetFxNetCoreSdkSearch" : L"NetFxNetCoreSearch";
+    const NETFX_SEARCH_TYPE searchType = isSdk ? NETFX_SEARCH_TYPE_NET_CORE_SDK_SEARCH :  NETFX_SEARCH_TYPE_NET_CORE_SEARCH;
     // Select Netfx search nodes.
     hr = XmlSelectNodes(pixnBundleExtension, L"NetFxNetCoreSearch", &pixnNodes);
     BextExitOnFailure(hr, "Failed to select Netfx search nodes.");
@@ -46,9 +48,9 @@ STDMETHODIMP NetfxSearchParseFromXml(
         BextExitOnFailure(hr, "Failed to get @Id.");
 
         // Read type specific attributes.
-        if (CSTR_EQUAL == ::CompareStringW(LOCALE_INVARIANT, 0, bstrNodeName, -1, L"NetFxNetCoreSearch", -1))
+        if (CSTR_EQUAL == ::CompareStringW(LOCALE_INVARIANT, 0, bstrNodeName, -1, nodeName, -1))
         {
-            pSearch->Type = NETFX_SEARCH_TYPE_NET_CORE_SEARCH;
+            pSearch->Type = searchType;
 
             // @RuntimeType
             hr = XmlGetAttributeUInt32(pixnNode, L"RuntimeType", reinterpret_cast<DWORD*>(&pSearch->NetCoreSearch.runtimeType));
@@ -78,6 +80,23 @@ LExit:
     ReleaseObject(pixnNodes);
 
     return hr;
+}
+
+STDMETHODIMP NetfxSearchRuntimeParseFromXml(
+    __in NETFX_SEARCHES* pSearches,
+    __in IXMLDOMNode* pixnBundleExtension
+    )
+{
+    return NetfxSearchParseFromXml(pSearches, pixnBundleExtension, false);
+}
+
+
+STDMETHODIMP NetfxSearchSdkParseFromXml(
+    __in NETFX_SEARCHES* pSearches,
+    __in IXMLDOMNode* pixnBundleExtension
+    )
+{
+    return NetfxSearchParseFromXml(pSearches, pixnBundleExtension, true);
 }
 
 void NetfxSearchUninitialize(
@@ -114,6 +133,9 @@ STDMETHODIMP NetfxSearchExecute(
     {
     case NETFX_SEARCH_TYPE_NET_CORE_SEARCH:
         hr = NetfxPerformDetectNetCore(wzVariable, pSearch, pEngine, wzBaseDirectory);
+        break;
+    case NETFX_SEARCH_TYPE_NET_CORE_SDK_SEARCH:
+        hr = NetfxPerformDetectNetCoreSdk(wzVariable, pSearch, pEngine, wzBaseDirectory);
         break;
     default:
         hr = E_UNEXPECTED;
