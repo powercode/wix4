@@ -109,50 +109,87 @@ LExit:
     return hr;
 }
 
+
 static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
     __in const hostfxr_dotnet_environment_info* pInfo,
     __in LPVOID pvContext
     )
 {
-    NETCORESEARCH_STATE* pState = reinterpret_cast<NETCORESEARCH_STATE*>(pvContext);
+    NETCORESEARCH_STATE* pState = static_cast<NETCORESEARCH_STATE*>(pvContext);
     HRESULT hr = S_OK;
-    VERUTIL_VERSION* pFrameworkVersion = NULL;
+    VERUTIL_VERSION* pDotnetVersion = nullptr;
     int nCompare = 0;
 
-    for (size_t i = 0; i < pInfo->framework_count; ++i)
+    const bool isSdk = CSTR_EQUAL == ::CompareStringW(LOCALE_INVARIANT, NORM_IGNORECASE, pState->wzTargetName, -1, L"sdk", -1);
+
+    if (isSdk)
     {
-        const hostfxr_dotnet_environment_framework_info* pFrameworkInfo = pInfo->frameworks + i;
-        ReleaseVerutilVersion(pFrameworkVersion);
-
-        if (CSTR_EQUAL != ::CompareStringW(LOCALE_INVARIANT, NORM_IGNORECASE, pState->wzTargetName, -1, pFrameworkInfo->name, -1))
+        for (size_t i = 0; i < pInfo->sdk_count; ++i)
         {
-            continue;
-        }
+            const hostfxr_dotnet_environment_sdk_info* pSdkInfo = pInfo->sdks + i;
+            ReleaseVerutilVersion(pDotnetVersion);
 
-        hr = VerParseVersion(pFrameworkInfo->version, 0, FALSE, &pFrameworkVersion);
-        ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to parse framework version: %ls", pFrameworkInfo->version);
+            hr = VerParseVersion(pSdkInfo->version, 0, FALSE, &pDotnetVersion);
+            ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to parse sdk version: %ls", pSdkInfo->version);
 
-        if (pFrameworkVersion->dwMajor != pState->dwMajorVersion)
-        {
-            continue;
-        }
-
-        if (pState->pVersion)
-        {
-            hr = VerCompareParsedVersions(pState->pVersion, pFrameworkVersion, &nCompare);
-            ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to compare versions.");
-
-            if (nCompare > -1)
+            if (pDotnetVersion->dwMajor != pState->dwMajorVersion)
             {
                 continue;
             }
-        }
 
-        ReleaseVerutilVersion(pState->pVersion);
-        pState->pVersion = pFrameworkVersion;
-        pFrameworkVersion = NULL;
+            if (pState->pVersion)
+            {
+                hr = VerCompareParsedVersions(pState->pVersion, pDotnetVersion, &nCompare);
+                ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to compare versions.");
+
+                if (nCompare > -1)
+                {
+                    continue;
+                }
+            }
+
+            ReleaseVerutilVersion(pState->pVersion);
+            pState->pVersion = pDotnetVersion;
+            pDotnetVersion = nullptr;
+        }
+    }
+	else // framework, not Sdk 
+	{
+        for (size_t i = 0; i < pInfo->framework_count; ++i)
+        {
+            const hostfxr_dotnet_environment_framework_info* pFrameworkInfo = pInfo->frameworks + i;
+            ReleaseVerutilVersion(pDotnetVersion);
+
+            if (CSTR_EQUAL != ::CompareStringW(LOCALE_INVARIANT, NORM_IGNORECASE, pState->wzTargetName, -1, pFrameworkInfo->name, -1))
+            {
+                continue;
+            }
+
+            hr = VerParseVersion(pFrameworkInfo->version, 0, FALSE, &pDotnetVersion);
+            ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to parse framework version: %ls", pFrameworkInfo->version);
+
+            if (pDotnetVersion->dwMajor != pState->dwMajorVersion)
+            {
+                continue;
+            }
+
+            if (pState->pVersion)
+            {
+                hr = VerCompareParsedVersions(pState->pVersion, pDotnetVersion, &nCompare);
+                ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to compare versions.");
+
+                if (nCompare > -1)
+                {
+                    continue;
+                }
+            }
+
+            ReleaseVerutilVersion(pState->pVersion);
+            pState->pVersion = pDotnetVersion;
+            pDotnetVersion = nullptr;
+	    }
     }
 
 LExit:
-    ReleaseVerutilVersion(pFrameworkVersion);
+    ReleaseVerutilVersion(pDotnetVersion);
 }
