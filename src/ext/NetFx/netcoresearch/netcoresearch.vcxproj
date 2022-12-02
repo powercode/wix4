@@ -27,7 +27,6 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-
   <PropertyGroup Label="Globals">
     <ProjectGuid>{A7FD9EF2-68CF-4C8E-AD81-3E8A6C7E1937}</ProjectGuid>
     <ConfigurationType>Application</ConfigurationType>
@@ -35,10 +34,8 @@
     <ProjectSubSystem>Console</ProjectSubSystem>
     <TargetName>netcoresearch</TargetName>
   </PropertyGroup>
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-
   <PropertyGroup>
     <NetHostPlatform>$(Platform)</NetHostPlatform>
     <NetHostPlatform Condition=" '$(NetHostPlatform)'=='Win32' ">x86</NetHostPlatform>
@@ -46,26 +43,36 @@
     <HostfxrPath>..\..\..\..\packages\runtime.win-$(NetHostPlatform).Microsoft.NETCore.DotNetHostResolver.6.0.4\runtimes\win-$(NetHostPlatform)\native\</HostfxrPath>
     <ProjectAdditionalIncludeDirectories>$(NetHostPath)</ProjectAdditionalIncludeDirectories>
   </PropertyGroup>
-
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExceptionHandling>Sync</ExceptionHandling>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExceptionHandling>Sync</ExceptionHandling>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="netcoresearch.cpp" />
     <ClCompile Include="precomp.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
   </ItemGroup>
-
   <ItemGroup>
+    <ClInclude Include="console.h" />
+    <ClInclude Include="dotnet_version.h" />
+    <ClInclude Include="dynamic_module.h" />
     <ClInclude Include="netcoresearch.h" />
     <ClInclude Include="precomp.h" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="WixToolset.Dutil" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-
   <Target Name="CopyHostfxr" AfterTargets="Build">
     <Copy SourceFiles="$(HostfxrPath)hostfxr.dll" DestinationFolder="$(OutputPath)" />
   </Target>
