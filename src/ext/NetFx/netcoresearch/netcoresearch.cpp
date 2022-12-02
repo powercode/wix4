@@ -2,18 +2,39 @@
 
 #include "precomp.h"
 
+#include <filesystem>
+#include <string_view>
+#include <sstream>
+
+#include "dotnet_version.h"
+#include "console.h"
+#include "dynamic_module.h"
+
 struct NETCORESEARCH_STATE
 {
-    LPCWSTR wzTargetName;
-    DWORD dwMajorVersion;
-    VERUTIL_VERSION* pVersion;
+    std::wstring_view TargetName;
+    DWORD MajorVersion;
+    dotnet_version Version;
 };
 
+auto tryParse(std::wstring_view input, __out DWORD& result ) -> bool
+{
+    std::wstringstream ss;
+    ss << input;
+    ss >> result;
+    return !ss.fail();
+}
+
+auto get_process_path() -> std::filesystem::path;
+
+
+
 static HRESULT GetDotnetEnvironmentInfo(
-    __in DWORD dwMajorVersion,
-    __in_z LPCWSTR wzTargetName,
-    __inout VERUTIL_VERSION** ppVersion
+    __in DWORD majorVersion,
+    __in std::wstring_view targetName,
+    __inout dotnet_version& version
     );
+
 static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
     __in const hostfxr_dotnet_environment_info* pInfo,
     __in LPVOID pvContext
@@ -21,92 +42,91 @@ static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
 
 int __cdecl wmain(int argc, LPWSTR argv[])
 {
-    HRESULT hr = S_OK;
-    DWORD dwMajorVersion = 0;
-    VERUTIL_VERSION* pVersion = NULL;
-    LPSTR pszVersion = NULL;
-
-    ::SetConsoleCP(CP_UTF8);
-
-    ConsoleInitialize();
-
     if (argc != 3)
     {
-        ExitFunction1(hr = E_INVALIDARG);
+        return E_INVALIDARG;
     }
 
-    hr = StrStringToUInt32(argv[1], 0, reinterpret_cast<UINT*>(&dwMajorVersion));
-    ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to get target version from: %ls", argv[1]);
+    const std::wstring_view majVerStr{ argv[1] };
+    const std::wstring_view targetName{ argv[2] };
+    console console{ CP_UTF8 };
 
-    hr = GetDotnetEnvironmentInfo(dwMajorVersion, argv[2], &pVersion);
-    ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to search for .NET Core.");
-
-    if (pVersion)
+    try
     {
-        hr = StrAnsiAllocString(&pszVersion, pVersion->sczVersion, 0, CP_UTF8);
-        ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to convert version to UTF-8.");
+        DWORD major_version;
+        if (!tryParse(majVerStr, __out major_version))
+        {
+            console::write_error(std::format(L"'{}' is not a valid major version.", majVerStr));
+            return E_INVALIDARG;
+        }
 
-        ConsoleWrite(CONSOLE_COLOR_NORMAL, "%hs", pszVersion);
+        dotnet_version version;
+
+        const HRESULT hr = GetDotnetEnvironmentInfo(major_version, targetName, OUT version);
+        if (FAILED(hr))
+        {
+            console::write_error_line("Failed to search for .NET Core." );
+            return hr;
+        }
+        if (version)
+        {
+            console::write_output_line(version->sczVersion);
+            return 0;
+        }
     }
-
-LExit:
-    ReleaseStr(pszVersion);
-    ReleaseVerutilVersion(pVersion);
-    ConsoleUninitialize();
-    return hr;
+    catch (version_exception& e)
+    {
+        console::write_error(std::format( "{}\n" , e.what()));
+        return e.hr();
+    }
+    catch(std::exception& e)
+    {
+        console::write_error(e.what());
+    }
+    return E_FAIL;
 }
 
-static HRESULT GetDotnetEnvironmentInfo(
-    __in DWORD dwMajorVersion,
-    __in_z LPCWSTR wzTargetName,
-    __inout VERUTIL_VERSION** ppVersion
-    )
+auto get_process_path() -> std::filesystem::path
 {
-    HRESULT hr = S_OK;
-    LPWSTR sczProcessPath = NULL;
-    LPWSTR sczHostfxrPath = NULL;
-    HMODULE hModule = NULL;
-    hostfxr_get_dotnet_environment_info_fn pfnGetDotnetEnvironmentInfo = NULL;
-    NETCORESEARCH_STATE state = { };
+    std::wstring path;
 
-    state.dwMajorVersion = dwMajorVersion;
-    state.wzTargetName = wzTargetName;
+    DWORD copied;
+    do {
+        path.resize(MAX_PATH);
+        copied = GetModuleFileName(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (copied == 0)
+        {
+            throw std::runtime_error("Failed to get process path");
+        }
 
-    hr = PathForCurrentProcess(&sczProcessPath, NULL);
-    ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to get process path.");
+    } while (copied >= path.size());
 
-    hr = PathGetDirectory(sczProcessPath, &sczHostfxrPath);
-    ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to get process directory.");
+    path.resize(copied);
 
-    hr = StrAllocConcat(&sczHostfxrPath, L"hostfxr.dll", 0);
-    ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to build hostfxr path.");
+    return { path };
+}
 
-    hModule = ::LoadLibraryExW(sczHostfxrPath, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
-    ConsoleExitOnNullWithLastError(hModule, hr, CONSOLE_COLOR_RED, "Failed to load hostfxr.");
 
-    pfnGetDotnetEnvironmentInfo = (hostfxr_get_dotnet_environment_info_fn)::GetProcAddress(hModule, "hostfxr_get_dotnet_environment_info");
-    ConsoleExitOnNullWithLastError(pfnGetDotnetEnvironmentInfo, hr, CONSOLE_COLOR_RED, "Failed to get address for hostfxr_get_dotnet_environment_info.");
+static HRESULT GetDotnetEnvironmentInfo(
+    NETCORESEARCH_STATE state = { targetName, majorVersion };
+    const auto hostfxrDll = get_process_path().remove_filename() /= L"hostfxr.dll";
+    dynamic_module hostfxr{ hostfxrDll };
 
-    hr = pfnGetDotnetEnvironmentInfo(NULL, NULL, GetDotnetEnvironmentInfoResult, &state);
-    ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to get .NET Core environment info.");
+    const auto hostfxrGetDotnetEnvironmentInfo = hostfxr.get_function<hostfxr_get_dotnet_environment_info_fn>("hostfxr_get_dotnet_environment_info");
 
-    if (state.pVersion)
+    const HRESULT hr = hostfxrGetDotnetEnvironmentInfo(nullptr, nullptr, GetDotnetEnvironmentInfoResult, &state);
+    if (FAILED(hr))
     {
-        *ppVersion = state.pVersion;
-        state.pVersion = NULL;
+        ConsoleWriteError(hr, CONSOLE_COLOR_RED, "Failed to get .NET Core environment info.");
+        return hr;
     }
 
-LExit:
-    ReleaseVerutilVersion(state.pVersion);
-    ReleaseStr(sczHostfxrPath);
-    ReleaseStr(sczProcessPath);
-
-    if (hModule)
+    if (state.Version)
     {
-        ::FreeLibrary(hModule);
+        version = std::move(state.Version);
     }
 
-    return hr;
+    return S_OK;
 }
 
 
@@ -115,14 +135,11 @@ static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
     __in LPVOID pvContext
     )
 {
-    NETCORESEARCH_STATE* pState = static_cast<NETCORESEARCH_STATE*>(pvContext);
-    HRESULT hr = S_OK;
-    VERUTIL_VERSION* pDotnetVersion = nullptr;
-    int nCompare = 0;
+    const auto pState = static_cast<NETCORESEARCH_STATE*>(pvContext);
+    dotnet_version resultVersion;
 
-    const bool isSdk = CSTR_EQUAL == ::CompareStringW(LOCALE_INVARIANT, NORM_IGNORECASE, pState->wzTargetName, -1, L"sdk", -1);
-
-    if (isSdk)
+    const bool isSdk = pState->TargetName.compare(L"sdk") == 0;
+    try
     {
         for (size_t i = 0; i < pInfo->sdk_count; ++i)
         {
@@ -137,10 +154,10 @@ static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
                 continue;
             }
 
-            if (pState->pVersion)
-            {
-                hr = VerCompareParsedVersions(pState->pVersion, pDotnetVersion, &nCompare);
-                ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to compare versions.");
+                if (sdkVersion->dwMajor != pState->MajorVersion)
+                {
+                    continue;
+                }
 
                 if (nCompare > -1)
                 {
@@ -152,10 +169,7 @@ static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
             pState->pVersion = pDotnetVersion;
             pDotnetVersion = nullptr;
         }
-    }
-	else // framework, not Sdk 
-	{
-        for (size_t i = 0; i < pInfo->framework_count; ++i)
+        else // framework, not Sdk
         {
             const hostfxr_dotnet_environment_framework_info* pFrameworkInfo = pInfo->frameworks + i;
             ReleaseVerutilVersion(pDotnetVersion);
@@ -165,18 +179,20 @@ static void HOSTFXR_CALLTYPE GetDotnetEnvironmentInfoResult(
                 continue;
             }
 
-            hr = VerParseVersion(pFrameworkInfo->version, 0, FALSE, &pDotnetVersion);
-            ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to parse framework version: %ls", pFrameworkInfo->version);
+                if (CSTR_EQUAL != ::CompareStringW(LOCALE_INVARIANT, NORM_IGNORECASE, pState->TargetName.data(), -1, pFrameworkInfo->name, -1))
+                {
+                    continue;
+                }
 
             if (pDotnetVersion->dwMajor != pState->dwMajorVersion)
             {
                 continue;
             }
 
-            if (pState->pVersion)
-            {
-                hr = VerCompareParsedVersions(pState->pVersion, pDotnetVersion, &nCompare);
-                ConsoleExitOnFailure(hr, CONSOLE_COLOR_RED, "Failed to compare versions.");
+                if (frameworkVersion->dwMajor != pState->MajorVersion)
+                {
+                    continue;
+                }
 
                 if (nCompare > -1)
                 {

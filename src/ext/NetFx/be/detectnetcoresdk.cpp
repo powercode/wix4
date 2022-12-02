@@ -102,7 +102,7 @@ LExit:
     return hr;
 }
 
-HRESULT NetfxPerformDetectNetCore(
+HRESULT NetfxPerformDetectNetCoreSdk(
     __in LPCWSTR wzVariable,
     __in NETFX_SEARCH* pSearch,
     __in IBundleExtensionEngine* pEngine,
